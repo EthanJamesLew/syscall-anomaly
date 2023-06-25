@@ -1,44 +1,52 @@
 //! # Syscall Module
 //!
 //! This module defines the `Syscall` enum, which represents a system call and its arguments.
-//! Each variant of the `Syscall` enum corresponds to a different system call. The enum variants carry all 
+//! Each variant of the `Syscall` enum corresponds to a different system call. The enum variants carry all
 //! the relevant information about the system call as parameters.
-//! 
-//! This module also defines the helper structs `Address`, `Path`, and `FileDescriptor` used in the `Syscall` 
+//!
+//! This module also defines the helper structs `Address`, `Path`, and `FileDescriptor` used in the `Syscall`
 //! enum. These helper structs serve to increase code readability and maintainability.
 //!
 //! This `Syscall` enum is the primary data type used to represent system calls throughout the application.
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
+/// Represents a memory address. 
+/// It's serializable/deserializable for easy storage and retrieval.
 #[derive(Serialize, Deserialize)]
 pub struct Address {
     pub addr: usize,
 }
 
-// impl Debug to print addresses in Hex
+// Implement Debug trait to allow for custom output formatting for Address
 impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "0x{:x}", self.addr)
     }
 }
 
+/// Represents a filesystem path. 
+/// It's serializable/deserializable for easy storage and retrieval.
 #[derive(Serialize, Deserialize)]
 pub struct Path {
     pub path: String,
 }
 
-// impl Debug to print paths in quotes
+// Implement Debug trait to allow for custom output formatting for Path
 impl std::fmt::Debug for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "\"{}\"", self.path)
     }
 }
 
+/// Represents a file descriptor. 
+/// It's serializable/deserializable and debug-printable out of the box.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileDescriptor {
     pub fd: i32,
 }
 
+/// Enum representing different types of system calls. 
+/// Each variant of the enum represents a specific system call and the parameters it uses.
 #[derive(Serialize, Deserialize, Debug)]
 
 pub enum Syscall {

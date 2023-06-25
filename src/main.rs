@@ -1,3 +1,11 @@
+//! # Main Module
+//!
+//! This is the entry point of the application. This module is responsible for parsing command line arguments,
+//! launching and attaching the ptrace to the child process, and controlling the main execution loop. The main loop
+//! waits for the child process to enter or exit a system call, fetches the syscall number, decodes it into a Syscall
+//! enum, and then prints it. In case of syscall interruption, it simply skips to the next syscall.
+//! 
+//! This module primarily interacts with the `decoder.rs` module for decoding syscall numbers into the Syscall enum.
 use clap::{App, Arg};
 use libc::{c_int, c_long, pid_t};
 use std::ffi::c_void;

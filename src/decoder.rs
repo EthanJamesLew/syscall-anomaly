@@ -12,11 +12,15 @@ pub use syscalls::Sysno;
 
 use crate::syscall::{Address, FileDescriptor, Path, Syscall};
 
-// Import the ptrace function from libc
+// Import the ptrace function from libc library. ptrace is a system call that enables one process 
+// (the "tracer") to control another (the "tracee").
 extern "C" {
     pub fn ptrace(request: c_int, pid: pid_t, addr: *mut c_void, data: *mut c_void) -> c_long;
 }
 
+/// This function receives a system call number and a process ID. It decodes the system call number 
+/// into a corresponding system call using a match statement and then calls the appropriate function 
+/// to get the details of the system call.
 pub fn decode_syscall(syscall_number: i32, pid: pid_t) -> Syscall {
     match Sysno::from(syscall_number) {
         Sysno::openat => decode_openat(pid),
@@ -66,6 +70,8 @@ pub fn decode_syscall(syscall_number: i32, pid: pid_t) -> Syscall {
     }
 }
 
+/// This function reads a memory location of the traced process. It uses ptrace with PTRACE_PEEKDATA 
+/// which reads a word at the address addr in the traced process's memory.
 fn read_memory(pid: pid_t, addr: usize) -> c_long {
     unsafe {
         ptrace(
@@ -77,6 +83,8 @@ fn read_memory(pid: pid_t, addr: usize) -> c_long {
     }
 }
 
+/// This function reads a string from the traced process's memory. It reads a word at a time, treats 
+/// it as an array of bytes, and adds each byte to the string until it finds a null byte.
 fn read_string(pid: pid_t, addr: usize, len: usize) -> String {
     let mut s = String::with_capacity(len);
     for i in 0..len {
@@ -95,6 +103,12 @@ fn read_string(pid: pid_t, addr: usize, len: usize) -> String {
     s
 }
 
+/// Functions to read syscall arguments. Each syscall has up to six arguments, which are passed in 
+/// the registers RDI, RSI, RDX, R10, R8, and R9, respectively. These functions use ptrace with 
+/// PTRACE_PEEKUSER which reads a word at the specified offset in the traced process's user area 
+/// (the area of kernel memory where values such as registers are saved when signal delivery causes 
+/// a switch to kernel mode). The offset for each argument register is given by the corresponding 
+/// register's number times the size of a word (8 bytes).
 fn read_arg0(pid: i32) -> i64 {
     let a0 = unsafe {
         ptrace(
