@@ -52,6 +52,7 @@ pub fn decode_syscall(syscall_number: i32, pid: pid_t) -> Syscall {
         Sysno::getsockname => decode_getsockname(pid),
         Sysno::sendto => decode_sendto(pid),
         Sysno::recvfrom => decode_recvfrom(pid),
+        Sysno::exit_group => decode_exit_group(pid),
         num => decode_unknown(num),
     }
 }
@@ -739,4 +740,10 @@ fn decode_recvfrom(pid: pid_t) -> Syscall {
         src_addr: Address { addr: src_addr },
         addrlen: Address { addr: addrlen },
     }
+}
+
+fn decode_exit_group(pid: pid_t) -> Syscall {
+    let status = read_arg0(pid) as i32;
+
+    Syscall::ExitGroup { status }
 }

@@ -54,7 +54,6 @@ fn main() {
     println!("Attached to process {}", pid);
 
     // Continue to ptrace child process
-    let mut in_syscall = false;
     loop {
         let wait_status = unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
         if wait_status == -1 {
@@ -62,26 +61,24 @@ fn main() {
             break;
         }
 
-        if in_syscall {
-            // If we were in a syscall last time, print out the return value now
-            //let retval = unsafe { ptrace(libc::PTRACE_PEEKUSER.try_into().unwrap(), pid, (8 * libc::ORIG_RAX) as *mut c_void, std::ptr::null_mut()) };
-            //println!("Return: {}", retval);
-        } else {
-            // Get the syscall number
-            let syscall_number = unsafe {
-                ptrace(
-                    libc::PTRACE_PEEKUSER.try_into().unwrap(),
-                    pid,
-                    (8 * libc::ORIG_RAX) as *mut c_void,
-                    std::ptr::null_mut(),
-                )
-            };
+        // Get the syscall number
+        let syscall_number = unsafe {
+            ptrace(
+                libc::PTRACE_PEEKUSER.try_into().unwrap(),
+                pid,
+                (8 * libc::ORIG_RAX) as *mut c_void,
+                std::ptr::null_mut(),
+            )
+        };
+        if syscall_number >= 0 {
             let scall = decode_syscall(syscall_number as i32, pid);
             println!("{:?}", scall);
         }
 
-        // Flip the in_syscall flag
-        in_syscall = !in_syscall;
+        // if exit_group, exit
+        if syscall_number == syscalls::Sysno::exit_group as i64 {
+            break;
+        }
 
         // Tell the process to continue, stopping at the next entrance or exit from a syscall
         unsafe {

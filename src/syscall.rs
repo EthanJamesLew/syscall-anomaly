@@ -249,6 +249,9 @@ pub enum Syscall {
         src_addr: Address,
         addrlen: Address,
     },
+    ExitGroup {
+        status: i32,
+    },
     Unknown {
         syscall_number: Sysno,
     },
