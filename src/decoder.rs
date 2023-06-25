@@ -1,3 +1,12 @@
+//! # Decoder Module
+//!
+//! This module contains functions to decode system call numbers into their corresponding Syscall enums.
+//! The decoding functions also read the syscall arguments from the traced process. They make extensive use
+//! of the `read_arg` and `read_string` helper functions, which read a single argument or a null-terminated string
+//! from the traced process, respectively.
+//!
+//! The decoder functions in this module are designed to be used with the ptrace system call to assist in tracing
+//! the system calls made by another process.
 use libc::{c_int, c_long, c_void, pid_t};
 pub use syscalls::Sysno;
 

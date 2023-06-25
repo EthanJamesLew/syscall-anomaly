@@ -1,3 +1,13 @@
+//! # Syscall Module
+//!
+//! This module defines the `Syscall` enum, which represents a system call and its arguments.
+//! Each variant of the `Syscall` enum corresponds to a different system call. The enum variants carry all 
+//! the relevant information about the system call as parameters.
+//! 
+//! This module also defines the helper structs `Address`, `Path`, and `FileDescriptor` used in the `Syscall` 
+//! enum. These helper structs serve to increase code readability and maintainability.
+//!
+//! This `Syscall` enum is the primary data type used to represent system calls throughout the application.
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize)]

@@ -70,6 +70,7 @@ fn main() {
     let mut syscalls: Vec<syscall::Syscall> = Vec::new();
 
     // Continue to ptrace child process
+    let mut is_calling = true;
     loop {
         let wait_status = unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
         if wait_status == -1 {
@@ -86,16 +87,24 @@ fn main() {
                 std::ptr::null_mut(),
             )
         };
-        if syscall_number >= 0 {
-            let scall = decode_syscall(syscall_number as i32, pid);
-            syscalls.push(scall);
-            //println!("{:?}", scall);
+
+        // if entering syscall, decode and push to syscalls
+        if is_calling {
+            if syscall_number >= 0 {
+                let scall = decode_syscall(syscall_number as i32, pid);
+                syscalls.push(scall);
+            }
         }
 
         // if exit_group, exit
         if syscall_number == syscalls::Sysno::exit_group as i64 {
+            let scall = decode_syscall(syscall_number as i32, pid);
+            syscalls.push(scall);
             break;
         }
+
+        // Switch between entering and exiting syscall
+        is_calling = !is_calling;
 
         // Tell the process to continue, stopping at the next entrance or exit from a syscall
         unsafe {
