@@ -14,7 +14,14 @@ extern "C" {
 }
 
 fn read_memory(pid: pid_t, addr: usize) -> c_long {
-    unsafe { ptrace(libc::PTRACE_PEEKDATA.try_into().unwrap(), pid, addr as *mut c_void, std::ptr::null_mut()) }
+    unsafe {
+        ptrace(
+            libc::PTRACE_PEEKDATA.try_into().unwrap(),
+            pid,
+            addr as *mut c_void,
+            std::ptr::null_mut(),
+        )
+    }
 }
 
 fn read_string(pid: pid_t, addr: usize, len: usize) -> String {
@@ -35,27 +42,128 @@ fn read_string(pid: pid_t, addr: usize, len: usize) -> String {
     s
 }
 
+pub struct Address {
+    pub addr: usize,
+}
+
+// impl Debug to print addresses in Hex
+impl std::fmt::Debug for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "0x{:x}", self.addr)
+    }
+}
+
+pub struct Path {
+    pub path: String,
+}
+
+// impl Debug to print paths in quotes
+impl std::fmt::Debug for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "\"{}\"", self.path)
+    }
+}
+
+#[derive(Debug)]
+pub struct FileDescriptor {
+    pub fd: i32,
+}
+
 #[derive(Debug)]
 pub enum Syscall {
-    OpenAt { dirfd: usize, path: String, flags: i32 },
-    Close { fd: i32 },
-    Read { fd: i32, buf: usize, count: usize },
-    Write { fd: i32, buf: usize, count: usize, buf_str: String },
-    Mmap { addr: usize, length: usize, prot: usize, flags: usize, fd: usize, offset: usize },
-    Brk { addr: usize },
-    Pread64 { fd: usize, buf: usize, count: usize, offset: usize, buf_string: String },
-    Newfstatat { dirfd: usize, path: String, buf: usize, flag: usize },
-    ArchPrctl { code: usize, addr: usize },
-    SetTidAddress { tidptr: usize },
-    SetRobustList { head: usize, len: usize },
-    Rseq { rseq_ptr: usize, rseq_len: usize, flags: usize, sig: usize },
-    Mprotect { addr: usize, len: usize, prot: usize },
-    Prlimit64 { pid: usize, resource: usize, new_limit_ptr: usize, old_limit_ptr: usize },
-    Munmap { addr: usize, len: usize },
-    Getrandom { buf: usize, buflen: usize, flags: usize, buf_string: String },
-    Execve { filename: String, argv_ptr: usize, envp_ptr: usize },
-    Access { pathname: String, mode: usize },
-    Unknown { syscall_number: Sysno },
+    OpenAt {
+        dirfd: FileDescriptor,
+        path: Path,
+        flags: i32,
+    },
+    Close {
+        fd: FileDescriptor,
+    },
+    Read {
+        fd: FileDescriptor,
+        buf: Address,
+        count: usize,
+    },
+    Write {
+        fd: FileDescriptor,
+        buf: Address,
+        count: usize,
+        buf_str: String,
+    },
+    Mmap {
+        addr: Address,
+        length: usize,
+        prot: usize,
+        flags: usize,
+        fd: FileDescriptor,
+        offset: usize,
+    },
+    Brk {
+        addr: Address,
+    },
+    Pread64 {
+        fd: FileDescriptor,
+        buf: Address,
+        count: usize,
+        offset: usize,
+        buf_string: String,
+    },
+    Newfstatat {
+        dirfd: FileDescriptor,
+        path: Path,
+        buf: Address,
+        flag: usize,
+    },
+    ArchPrctl {
+        code: usize,
+        addr: Address,
+    },
+    SetTidAddress {
+        tidptr: Address,
+    },
+    SetRobustList {
+        head: Address,
+        len: usize,
+    },
+    Rseq {
+        rseq_ptr: Address,
+        rseq_len: usize,
+        flags: usize,
+        sig: usize,
+    },
+    Mprotect {
+        addr: Address,
+        len: usize,
+        prot: usize,
+    },
+    Prlimit64 {
+        pid: usize,
+        resource: usize,
+        new_limit_ptr: Address,
+        old_limit_ptr: Address,
+    },
+    Munmap {
+        addr: Address,
+        len: usize,
+    },
+    Getrandom {
+        buf: Address,
+        buflen: usize,
+        flags: usize,
+        buf_string: String,
+    },
+    Execve {
+        filename: Path,
+        argv_ptr: Address,
+        envp_ptr: Address,
+    },
+    Access {
+        pathname: Path,
+        mode: usize,
+    },
+    Unknown {
+        syscall_number: Sysno,
+    },
 }
 
 fn main() {
@@ -111,7 +219,12 @@ fn main() {
         } else {
             // Get the syscall number
             let syscall_number = unsafe {
-                ptrace(libc::PTRACE_PEEKUSER.try_into().unwrap(), pid, (8 * libc::ORIG_RAX) as *mut c_void, std::ptr::null_mut())
+                ptrace(
+                    libc::PTRACE_PEEKUSER.try_into().unwrap(),
+                    pid,
+                    (8 * libc::ORIG_RAX) as *mut c_void,
+                    std::ptr::null_mut(),
+                )
             };
             let scall = match Sysno::from(syscall_number as i32) {
                 Sysno::openat => decode_openat(pid),
@@ -142,50 +255,108 @@ fn main() {
         in_syscall = !in_syscall;
 
         // Tell the process to continue, stopping at the next entrance or exit from a syscall
-        unsafe { ptrace(libc::PTRACE_SYSCALL.try_into().unwrap(), pid, std::ptr::null_mut(), std::ptr::null_mut()) };
+        unsafe {
+            ptrace(
+                libc::PTRACE_SYSCALL.try_into().unwrap(),
+                pid,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
     }
 }
 
 fn decode_unknown(syscall_number: Sysno) -> Syscall {
-    Syscall::Unknown { syscall_number: syscall_number }
+    Syscall::Unknown {
+        syscall_number: syscall_number,
+    }
 }
 
 fn read_arg0(pid: i32) -> i64 {
-    let a0 = unsafe { ptrace(libc::PTRACE_PEEKUSER.try_into().unwrap(), pid, (8 * libc::RDI) as *mut c_void, std::ptr::null_mut()) };
+    let a0 = unsafe {
+        ptrace(
+            libc::PTRACE_PEEKUSER.try_into().unwrap(),
+            pid,
+            (8 * libc::RDI) as *mut c_void,
+            std::ptr::null_mut(),
+        )
+    };
     a0
 }
 
 fn read_arg1(pid: i32) -> i64 {
-    let a1 = unsafe { ptrace(libc::PTRACE_PEEKUSER.try_into().unwrap(), pid, (8 * libc::RSI) as *mut c_void, std::ptr::null_mut()) };
+    let a1 = unsafe {
+        ptrace(
+            libc::PTRACE_PEEKUSER.try_into().unwrap(),
+            pid,
+            (8 * libc::RSI) as *mut c_void,
+            std::ptr::null_mut(),
+        )
+    };
     a1
 }
 
 fn read_arg2(pid: i32) -> i64 {
-    let a2 = unsafe { ptrace(libc::PTRACE_PEEKUSER.try_into().unwrap(), pid, (8 * libc::RDX) as *mut c_void, std::ptr::null_mut()) };
+    let a2 = unsafe {
+        ptrace(
+            libc::PTRACE_PEEKUSER.try_into().unwrap(),
+            pid,
+            (8 * libc::RDX) as *mut c_void,
+            std::ptr::null_mut(),
+        )
+    };
     a2
 }
 
 fn read_arg3(pid: i32) -> i64 {
-    let a3 = unsafe { ptrace(libc::PTRACE_PEEKUSER.try_into().unwrap(), pid, (8 * libc::R10) as *mut c_void, std::ptr::null_mut()) };
+    let a3 = unsafe {
+        ptrace(
+            libc::PTRACE_PEEKUSER.try_into().unwrap(),
+            pid,
+            (8 * libc::R10) as *mut c_void,
+            std::ptr::null_mut(),
+        )
+    };
     a3
 }
 
 fn read_arg4(pid: i32) -> i64 {
-    let a4 = unsafe { ptrace(libc::PTRACE_PEEKUSER.try_into().unwrap(), pid, (8 * libc::R8) as *mut c_void, std::ptr::null_mut()) };
+    let a4 = unsafe {
+        ptrace(
+            libc::PTRACE_PEEKUSER.try_into().unwrap(),
+            pid,
+            (8 * libc::R8) as *mut c_void,
+            std::ptr::null_mut(),
+        )
+    };
     a4
 }
 
 fn read_arg5(pid: i32) -> i64 {
-    let a5 = unsafe { ptrace(libc::PTRACE_PEEKUSER.try_into().unwrap(), pid, (8 * libc::R9) as *mut c_void, std::ptr::null_mut()) };
+    let a5 = unsafe {
+        ptrace(
+            libc::PTRACE_PEEKUSER.try_into().unwrap(),
+            pid,
+            (8 * libc::R9) as *mut c_void,
+            std::ptr::null_mut(),
+        )
+    };
     a5
 }
 
 fn decode_write(pid: i32) -> Syscall {
     let fd = read_arg0(pid);
-    let buf_ptr = read_arg1(pid); 
+    let buf_ptr = read_arg1(pid);
     let len = read_arg2(pid);
     let string = read_string(pid, buf_ptr as usize, len as usize);
-    Syscall::Write { fd: fd as i32, buf: buf_ptr as usize, count: len as usize, buf_str: string }
+    Syscall::Write {
+        fd: FileDescriptor { fd: fd as i32 },
+        buf: Address {
+            addr: buf_ptr as usize,
+        },
+        count: len as usize,
+        buf_str: string,
+    }
 }
 
 fn decode_read(pid: pid_t) -> Syscall {
@@ -193,7 +364,13 @@ fn decode_read(pid: pid_t) -> Syscall {
     let buf_addr = read_arg1(pid);
     let count = read_arg2(pid);
 
-    Syscall::Read { fd: fd as i32, buf: buf_addr as usize, count: count as usize }
+    Syscall::Read {
+        fd: FileDescriptor { fd: fd as i32 },
+        buf: Address {
+            addr: buf_addr as usize,
+        },
+        count: count as usize,
+    }
 }
 
 fn decode_openat(pid: pid_t) -> Syscall {
@@ -203,13 +380,19 @@ fn decode_openat(pid: pid_t) -> Syscall {
 
     let path = read_string(pid, path_ptr as usize, 256); // Assume maximum path length of 256
 
-    Syscall::OpenAt { dirfd: dirfd as usize, path: path, flags: flags as i32 }
+    Syscall::OpenAt {
+        dirfd: FileDescriptor { fd: dirfd as i32 },
+        path: Path { path: path },
+        flags: flags as i32,
+    }
 }
 
 fn decode_close(pid: pid_t) -> Syscall {
     let fd = read_arg0(pid);
 
-    Syscall::Close { fd: fd as i32 }
+    Syscall::Close {
+        fd: FileDescriptor { fd: fd as i32 },
+    }
 }
 
 fn decode_mmap(pid: pid_t) -> Syscall {
@@ -220,12 +403,25 @@ fn decode_mmap(pid: pid_t) -> Syscall {
     let fd = read_arg4(pid);
     let offset = read_arg5(pid);
 
-    Syscall::Mmap { addr: addr as usize, length: length as usize, prot: prot as usize, flags: flags as usize, fd: fd as usize, offset: offset as usize }
+    Syscall::Mmap {
+        addr: Address {
+            addr: addr as usize,
+        },
+        length: length as usize,
+        prot: prot as usize,
+        flags: flags as usize,
+        fd: FileDescriptor { fd: fd as i32 },
+        offset: offset as usize,
+    }
 }
 
 fn decode_brk(pid: pid_t) -> Syscall {
     let addr = read_arg0(pid);
-    Syscall::Brk { addr: addr as usize }
+    Syscall::Brk {
+        addr: Address {
+            addr: addr as usize,
+        },
+    }
 }
 
 fn decode_pread64(pid: pid_t) -> Syscall {
@@ -235,7 +431,15 @@ fn decode_pread64(pid: pid_t) -> Syscall {
     let offset = read_arg3(pid);
 
     let buf = read_string(pid, buf_ptr as usize, len as usize);
-    Syscall::Pread64 { fd: fd as usize, buf: buf_ptr as usize, count: len as usize, offset: offset as usize, buf_string: buf } 
+    Syscall::Pread64 {
+        fd: FileDescriptor { fd: fd as i32 },
+        buf: Address {
+            addr: buf_ptr as usize,
+        },
+        count: len as usize,
+        offset: offset as usize,
+        buf_string: buf,
+    }
 }
 
 fn decode_newfstatat(pid: pid_t) -> Syscall {
@@ -245,26 +449,47 @@ fn decode_newfstatat(pid: pid_t) -> Syscall {
     let flag = read_arg3(pid);
 
     let path = read_string(pid, path_ptr as usize, 256); // Assume max path length of 256
-    Syscall::Newfstatat { dirfd: dirfd as usize, path: path, buf: buf_ptr as usize, flag: flag as usize }
+    Syscall::Newfstatat {
+        dirfd: FileDescriptor { fd: dirfd as i32 },
+        path: Path { path: path },
+        buf: Address {
+            addr: buf_ptr as usize,
+        },
+        flag: flag as usize,
+    }
 }
 
 fn decode_arch_prctl(pid: pid_t) -> Syscall {
     let code = read_arg0(pid);
     let addr = read_arg1(pid);
 
-    Syscall::ArchPrctl { code: code as usize, addr: addr as usize }
+    Syscall::ArchPrctl {
+        code: code as usize,
+        addr: Address {
+            addr: addr as usize,
+        },
+    }
 }
 
 fn decode_set_tid_address(pid: pid_t) -> Syscall {
-    let tidptr = read_arg0(pid); 
-    Syscall::SetTidAddress { tidptr: tidptr as usize }
+    let tidptr = read_arg0(pid);
+    Syscall::SetTidAddress {
+        tidptr: Address {
+            addr: tidptr as usize,
+        },
+    }
 }
 
 fn decode_set_robust_list(pid: pid_t) -> Syscall {
     let head = read_arg0(pid);
     let len = read_arg1(pid);
 
-    Syscall::SetRobustList { head: head as usize, len: len as usize }
+    Syscall::SetRobustList {
+        head: Address {
+            addr: head as usize,
+        },
+        len: len as usize,
+    }
 }
 
 fn decode_rseq(pid: pid_t) -> Syscall {
@@ -273,7 +498,14 @@ fn decode_rseq(pid: pid_t) -> Syscall {
     let flags = read_arg2(pid);
     let sig = read_arg3(pid);
 
-    Syscall::Rseq { rseq_ptr: rseq_ptr as usize, rseq_len: rseq_len as usize, flags: flags as usize, sig: sig as usize }
+    Syscall::Rseq {
+        rseq_ptr: Address {
+            addr: rseq_ptr as usize,
+        },
+        rseq_len: rseq_len as usize,
+        flags: flags as usize,
+        sig: sig as usize,
+    }
 }
 
 fn decode_mprotect(pid: pid_t) -> Syscall {
@@ -281,7 +513,13 @@ fn decode_mprotect(pid: pid_t) -> Syscall {
     let len = read_arg1(pid);
     let prot = read_arg2(pid);
 
-    Syscall::Mprotect { addr: addr as usize, len: len as usize, prot: prot as usize }
+    Syscall::Mprotect {
+        addr: Address {
+            addr: addr as usize,
+        },
+        len: len as usize,
+        prot: prot as usize,
+    }
 }
 
 fn decode_prlimit64(pid: pid_t) -> Syscall {
@@ -290,14 +528,28 @@ fn decode_prlimit64(pid: pid_t) -> Syscall {
     let new_limit_ptr = read_arg2(pid);
     let old_limit_ptr = read_arg3(pid);
 
-    Syscall::Prlimit64 { pid: pid0 as usize, resource: resource as usize, new_limit_ptr: new_limit_ptr as usize, old_limit_ptr: old_limit_ptr as usize }
+    Syscall::Prlimit64 {
+        pid: pid0 as usize,
+        resource: resource as usize,
+        new_limit_ptr: Address {
+            addr: new_limit_ptr as usize,
+        },
+        old_limit_ptr: Address {
+            addr: old_limit_ptr as usize,
+        },
+    }
 }
 
 fn decode_munmap(pid: pid_t) -> Syscall {
     let addr = read_arg0(pid);
     let len = read_arg1(pid);
 
-    Syscall::Munmap { addr: addr as usize, len: len as usize }
+    Syscall::Munmap {
+        addr: Address {
+            addr: addr as usize,
+        },
+        len: len as usize,
+    }
 }
 
 fn decode_getrandom(pid: pid_t) -> Syscall {
@@ -307,7 +559,12 @@ fn decode_getrandom(pid: pid_t) -> Syscall {
 
     let random_bytes = read_string(pid, buf as usize, buflen as usize);
 
-    Syscall::Getrandom { buf: buf as usize, buflen: buflen as usize, flags: flags as usize, buf_string: random_bytes }
+    Syscall::Getrandom {
+        buf: Address { addr: buf as usize },
+        buflen: buflen as usize,
+        flags: flags as usize,
+        buf_string: random_bytes,
+    }
 }
 
 fn decode_execve(pid: pid_t) -> Syscall {
@@ -316,8 +573,16 @@ fn decode_execve(pid: pid_t) -> Syscall {
     let envp_ptr = read_arg2(pid);
 
     let filename = read_string(pid, filename_ptr as usize, 255);
-    
-    Syscall::Execve { filename: filename, argv_ptr: argv_ptr as usize, envp_ptr: envp_ptr as usize }
+
+    Syscall::Execve {
+        filename: Path { path: filename },
+        argv_ptr: Address {
+            addr: argv_ptr as usize,
+        },
+        envp_ptr: Address {
+            addr: envp_ptr as usize,
+        },
+    }
 }
 
 fn decode_access(pid: pid_t) -> Syscall {
@@ -325,6 +590,9 @@ fn decode_access(pid: pid_t) -> Syscall {
     let mode = read_arg1(pid);
 
     let pathname = read_string(pid, pathname_ptr as usize, 255);
-    
-    Syscall::Access { pathname: pathname, mode: mode as usize } 
+
+    Syscall::Access {
+        pathname: Path { path: pathname },
+        mode: mode as usize,
+    }
 }
