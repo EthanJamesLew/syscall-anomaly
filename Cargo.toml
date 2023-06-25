@@ -10,3 +10,5 @@ description = "syscall anomaly detection"
 [dependencies]
 libc = "0.2"
 clap = "3.0"
+nix = "0.20.0"
+syscalls = "0.5.0"
