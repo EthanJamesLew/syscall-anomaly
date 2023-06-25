@@ -160,7 +160,8 @@ fn read_arg5(pid: i32) -> i64 {
 
 fn decode_unknown(syscall_number: Sysno) -> Syscall {
     Syscall::Unknown {
-        syscall_number: syscall_number,
+        syscall_number: syscall_number as i32,
+        syscall_name: format!("{:?}", syscall_number),
     }
 }
 
@@ -611,7 +612,7 @@ fn decode_sysinfo(pid: pid_t) -> Syscall {
     }
 }
 
-fn decode_geteuid(pid: pid_t) -> Syscall {
+fn decode_geteuid(_pid: pid_t) -> Syscall {
     // geteuid has no arguments, so just return the Syscall variant
     Syscall::Geteuid
 }

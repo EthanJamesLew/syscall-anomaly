@@ -1,8 +1,10 @@
 use clap::{App, Arg};
 use libc::{c_int, c_long, pid_t};
 use std::ffi::c_void;
+use std::fs::File;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
+use std::io::Write;
 
 mod decoder;
 mod syscall;
@@ -14,6 +16,17 @@ const PTRACE_TRACEME: c_int = 0;
 // Import the ptrace function from libc
 extern "C" {
     pub fn ptrace(request: c_int, pid: pid_t, addr: *mut c_void, data: *mut c_void) -> c_long;
+}
+
+pub fn write_syscalls_to_file(syscalls: Vec<syscall::Syscall>, filename: &str) -> std::io::Result<()> {
+    let mut file = File::create(filename)?;
+
+    for syscall in syscalls {
+        let json = serde_json::to_string(&syscall).unwrap();
+        writeln!(file, "{}", json)?;
+    }
+
+    Ok(())
 }
 
 fn main() {
@@ -53,6 +66,9 @@ fn main() {
 
     println!("Attached to process {}", pid);
 
+    // collect syscalls
+    let mut syscalls: Vec<syscall::Syscall> = Vec::new();
+
     // Continue to ptrace child process
     loop {
         let wait_status = unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
@@ -72,7 +88,8 @@ fn main() {
         };
         if syscall_number >= 0 {
             let scall = decode_syscall(syscall_number as i32, pid);
-            println!("{:?}", scall);
+            syscalls.push(scall);
+            //println!("{:?}", scall);
         }
 
         // if exit_group, exit
@@ -90,4 +107,7 @@ fn main() {
             )
         };
     }
+
+    // Write syscalls to file
+    write_syscalls_to_file(syscalls, "syscalls.json").unwrap();
 }

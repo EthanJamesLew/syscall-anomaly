@@ -1,5 +1,6 @@
-use syscalls::Sysno;
+use serde::{Serialize, Deserialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct Address {
     pub addr: usize,
 }
@@ -11,6 +12,7 @@ impl std::fmt::Debug for Address {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Path {
     pub path: String,
 }
@@ -22,12 +24,13 @@ impl std::fmt::Debug for Path {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FileDescriptor {
     pub fd: i32,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
+
 pub enum Syscall {
     OpenAt {
         dirfd: FileDescriptor,
@@ -253,6 +256,7 @@ pub enum Syscall {
         status: i32,
     },
     Unknown {
-        syscall_number: Sysno,
+        syscall_number: i32,
+        syscall_name: String,
     },
 }
