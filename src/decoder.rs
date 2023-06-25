@@ -28,6 +28,30 @@ pub fn decode_syscall(syscall_number: i32, pid: pid_t) -> Syscall {
         Sysno::getrandom => decode_getrandom(pid),
         Sysno::execve => decode_execve(pid),
         Sysno::access => decode_access(pid),
+        Sysno::lseek => decode_lseek(pid),
+        Sysno::ioctl => decode_ioctl(pid),
+        Sysno::statfs => decode_statfs(pid),
+        Sysno::getdents64 => decode_getdents64(pid),
+        Sysno::statx => decode_statx(pid),
+        Sysno::lgetxattr => decode_lgetxattr(pid),
+        Sysno::getxattr => decode_getxattr(pid),
+        Sysno::connect => decode_connect(pid),
+        Sysno::socket => decode_socket(pid),
+        Sysno::futex => decode_futex(pid),
+        Sysno::rt_sigaction => decode_rt_sigaction(pid),
+        Sysno::fcntl => decode_fcntl(pid),
+        Sysno::readlink => decode_readlink(pid),
+        Sysno::sysinfo => decode_sysinfo(pid),
+        Sysno::geteuid => decode_geteuid(pid),
+        Sysno::socketpair => decode_socketpair(pid),
+        Sysno::rt_sigprocmask => decode_rt_sigprocmask(pid),
+        Sysno::poll => decode_poll(pid),
+        Sysno::clone3 => decode_clone3(pid),
+        Sysno::setsockopt => decode_setsockopt(pid),
+        Sysno::getpeername => decode_getpeername(pid),
+        Sysno::getsockname => decode_getsockname(pid),
+        Sysno::sendto => decode_sendto(pid),
+        Sysno::recvfrom => decode_recvfrom(pid),
         num => decode_unknown(num),
     }
 }
@@ -389,5 +413,330 @@ fn decode_access(pid: pid_t) -> Syscall {
     Syscall::Access {
         pathname: Path { path: pathname },
         mode: mode as usize,
+    }
+}
+
+fn decode_lseek(pid: pid_t) -> Syscall {
+    let fd = read_arg0(pid) as i32;
+    let offset = read_arg1(pid) as i64;
+    let whence = read_arg2(pid) as i32;
+
+    Syscall::Lseek {
+        fd: FileDescriptor { fd },
+        offset,
+        whence,
+    }
+}
+
+fn decode_ioctl(pid: pid_t) -> Syscall {
+    let fd = read_arg0(pid) as i32;
+    let request = read_arg1(pid) as usize;
+    let argp_addr = read_arg2(pid) as usize;
+
+    Syscall::Ioctl {
+        fd: FileDescriptor { fd },
+        request,
+        argp: Address { addr: argp_addr },
+    }
+}
+
+fn decode_statfs(pid: pid_t) -> Syscall {
+    let path_addr = read_arg0(pid) as usize;
+    let buf_addr = read_arg1(pid) as usize;
+
+    let path = read_string(pid, path_addr, 255);
+
+    Syscall::Statfs {
+        path: Path { path },
+        buf: Address { addr: buf_addr },
+    }
+}
+
+fn decode_getdents64(pid: pid_t) -> Syscall {
+    let fd = read_arg0(pid) as i32;
+    let dirp_addr = read_arg1(pid) as usize;
+    let count = read_arg2(pid) as usize;
+
+    Syscall::Getdents64 {
+        fd: FileDescriptor { fd },
+        dirp: Address { addr: dirp_addr },
+        count,
+    }
+}
+
+fn decode_statx(pid: pid_t) -> Syscall {
+    let dfd = read_arg0(pid) as i32;
+    let pathname_addr = read_arg1(pid) as usize;
+    let flags = read_arg2(pid) as i32;
+    let mask = read_arg3(pid) as u32;
+    let statxbuf_addr = read_arg4(pid) as usize;
+
+    let pathname = read_string(pid, pathname_addr, 255);
+
+    Syscall::Statx {
+        dfd: FileDescriptor { fd: dfd },
+        pathname: Path { path: pathname },
+        flags,
+        mask,
+        statxbuf: Address {
+            addr: statxbuf_addr,
+        },
+    }
+}
+
+fn decode_lgetxattr(pid: pid_t) -> Syscall {
+    let pathname_addr = read_arg0(pid) as usize;
+    let name_addr = read_arg1(pid) as usize;
+    let value_addr = read_arg2(pid) as usize;
+    let size = read_arg3(pid) as usize;
+
+    let pathname = read_string(pid, pathname_addr, 255);
+    let name = read_string(pid, name_addr, 255);
+
+    Syscall::Lgetxattr {
+        pathname: Path { path: pathname },
+        name,
+        value: Address { addr: value_addr },
+        size,
+    }
+}
+
+fn decode_getxattr(pid: pid_t) -> Syscall {
+    let pathname_addr = read_arg0(pid) as usize;
+    let name_addr = read_arg1(pid) as usize;
+    let value_addr = read_arg2(pid) as usize;
+    let size = read_arg3(pid) as usize;
+
+    let pathname = read_string(pid, pathname_addr, 255);
+    let name = read_string(pid, name_addr, 255);
+
+    Syscall::Getxattr {
+        pathname: Path { path: pathname },
+        name,
+        value: Address { addr: value_addr },
+        size,
+    }
+}
+
+fn decode_connect(pid: pid_t) -> Syscall {
+    let fd = read_arg0(pid) as i32;
+    let sockaddr_addr = read_arg1(pid) as usize;
+    let addrlen = read_arg2(pid) as usize;
+
+    Syscall::Connect {
+        fd: FileDescriptor { fd },
+        sockaddr: Address {
+            addr: sockaddr_addr,
+        },
+        addrlen,
+    }
+}
+
+fn decode_socket(pid: pid_t) -> Syscall {
+    let domain = read_arg0(pid) as i32;
+    let type_ = read_arg1(pid) as i32;
+    let protocol = read_arg2(pid) as i32;
+
+    Syscall::Socket {
+        domain,
+        type_,
+        protocol,
+    }
+}
+
+fn decode_futex(pid: pid_t) -> Syscall {
+    let uaddr = read_arg0(pid) as usize;
+    let futex_op = read_arg1(pid) as i32;
+    let val = read_arg2(pid) as i32;
+    let timeout = read_arg3(pid) as usize;
+    let uaddr2 = read_arg4(pid) as usize;
+    let val3 = read_arg5(pid) as i32;
+
+    Syscall::Futex {
+        uaddr: Address { addr: uaddr },
+        futex_op,
+        val,
+        timeout: Address { addr: timeout },
+        uaddr2: Address { addr: uaddr2 },
+        val3,
+    }
+}
+
+fn decode_rt_sigaction(pid: pid_t) -> Syscall {
+    let signum = read_arg0(pid) as i32;
+    let act_addr = read_arg1(pid) as usize;
+    let oldact_addr = read_arg2(pid) as usize;
+    let sigsetsize = read_arg3(pid) as usize;
+
+    Syscall::RtSigaction {
+        signum,
+        act: Address { addr: act_addr },
+        oldact: Address { addr: oldact_addr },
+        sigsetsize,
+    }
+}
+
+fn decode_fcntl(pid: pid_t) -> Syscall {
+    let fd = read_arg0(pid) as i32;
+    let cmd = read_arg1(pid) as i32;
+    let arg = read_arg2(pid) as usize;
+
+    Syscall::Fcntl {
+        fd: FileDescriptor { fd },
+        cmd,
+        arg: Address { addr: arg },
+    }
+}
+
+fn decode_readlink(pid: pid_t) -> Syscall {
+    let pathname_addr = read_arg0(pid) as usize;
+    let buf_addr = read_arg1(pid) as usize;
+    let bufsize = read_arg2(pid) as usize;
+
+    let pathname = read_string(pid, pathname_addr, 255);
+
+    Syscall::Readlink {
+        pathname: Path { path: pathname },
+        buf: Address { addr: buf_addr },
+        bufsize,
+    }
+}
+
+fn decode_sysinfo(pid: pid_t) -> Syscall {
+    let info_addr = read_arg0(pid) as usize;
+
+    Syscall::Sysinfo {
+        info: Address { addr: info_addr },
+    }
+}
+
+fn decode_geteuid(pid: pid_t) -> Syscall {
+    // geteuid has no arguments, so just return the Syscall variant
+    Syscall::Geteuid
+}
+
+fn decode_socketpair(pid: pid_t) -> Syscall {
+    let domain = read_arg0(pid) as i32;
+    let socket_type = read_arg1(pid) as i32;
+    let protocol = read_arg2(pid) as i32;
+    let sv_addr = read_arg3(pid) as usize;
+
+    Syscall::Socketpair {
+        domain,
+        socket_type,
+        protocol,
+        sv: Address { addr: sv_addr },
+    }
+}
+
+fn decode_rt_sigprocmask(pid: pid_t) -> Syscall {
+    let how = read_arg0(pid) as i32;
+    let set_addr = read_arg1(pid) as usize;
+    let oldset_addr = read_arg2(pid) as usize;
+    let sigsetsize = read_arg3(pid) as usize;
+
+    Syscall::RtSigprocmask {
+        how,
+        set: Address { addr: set_addr },
+        oldset: Address { addr: oldset_addr },
+        sigsetsize,
+    }
+}
+
+fn decode_poll(pid: pid_t) -> Syscall {
+    let fds_addr = read_arg0(pid) as usize;
+    let nfds = read_arg1(pid) as usize;
+    let timeout = read_arg2(pid) as i32;
+
+    Syscall::Poll {
+        fds: Address { addr: fds_addr },
+        nfds,
+        timeout,
+    }
+}
+
+fn decode_clone3(pid: pid_t) -> Syscall {
+    let cl_args_addr = read_arg0(pid) as usize;
+    let size = read_arg1(pid) as usize;
+
+    Syscall::Clone3 {
+        cl_args: Address { addr: cl_args_addr },
+        size,
+    }
+}
+
+fn decode_setsockopt(pid: pid_t) -> Syscall {
+    let sockfd = read_arg0(pid) as i32;
+    let level = read_arg1(pid) as i32;
+    let optname = read_arg2(pid) as i32;
+    let optval_addr = read_arg3(pid) as usize;
+    let optlen = read_arg4(pid) as usize;
+
+    Syscall::Setsockopt {
+        sockfd: FileDescriptor { fd: sockfd },
+        level,
+        optname,
+        optval: Address { addr: optval_addr },
+        optlen,
+    }
+}
+
+fn decode_getpeername(pid: pid_t) -> Syscall {
+    let sockfd = read_arg0(pid) as i32;
+    let addr = read_arg1(pid) as usize;
+    let addrlen = read_arg2(pid) as usize;
+
+    Syscall::Getpeername {
+        sockfd: FileDescriptor { fd: sockfd },
+        addr: Address { addr },
+        addrlen: Address { addr: addrlen },
+    }
+}
+
+fn decode_getsockname(pid: pid_t) -> Syscall {
+    let sockfd = read_arg0(pid) as i32;
+    let addr = read_arg1(pid) as usize;
+    let addrlen = read_arg2(pid) as usize;
+
+    Syscall::Getsockname {
+        sockfd: FileDescriptor { fd: sockfd },
+        addr: Address { addr },
+        addrlen: Address { addr: addrlen },
+    }
+}
+
+fn decode_sendto(pid: pid_t) -> Syscall {
+    let sockfd = read_arg0(pid) as i32;
+    let buf = read_arg1(pid) as usize;
+    let len = read_arg2(pid) as usize;
+    let flags = read_arg3(pid) as i32;
+    let dest_addr = read_arg4(pid) as usize;
+    let addrlen = read_arg5(pid) as usize;
+
+    Syscall::Sendto {
+        sockfd: FileDescriptor { fd: sockfd },
+        buf: Address { addr: buf },
+        len,
+        flags,
+        dest_addr: Address { addr: dest_addr },
+        addrlen,
+    }
+}
+
+fn decode_recvfrom(pid: pid_t) -> Syscall {
+    let sockfd = read_arg0(pid) as i32;
+    let buf = read_arg1(pid) as usize;
+    let len = read_arg2(pid) as usize;
+    let flags = read_arg3(pid) as i32;
+    let src_addr = read_arg4(pid) as usize;
+    let addrlen = read_arg5(pid) as usize;
+
+    Syscall::Recvfrom {
+        sockfd: FileDescriptor { fd: sockfd },
+        buf: Address { addr: buf },
+        len,
+        flags,
+        src_addr: Address { addr: src_addr },
+        addrlen: Address { addr: addrlen },
     }
 }
