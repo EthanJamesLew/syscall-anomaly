@@ -8,18 +8,21 @@
 //! This module primarily interacts with the `decoder.rs` module for decoding syscall numbers into the Syscall enum.
 use clap::{App, Arg};
 use libc::{c_int, c_long, pid_t};
+use syscalls::Sysno;
 use std::ffi::c_void;
 use std::fs::File;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
-use std::io::Write;
+use std::io::{Write, BufReader};
 
 mod decoder;
 mod syscall;
+mod markov;
 use decoder::decode_syscall;
 
 // Define ptrace options
 const PTRACE_TRACEME: c_int = 0;
+const THRESHOLD: f64 = 0.01;
 
 // Import the ptrace function from libc
 extern "C" {
@@ -37,17 +40,33 @@ pub fn write_syscalls_to_file(syscalls: Vec<syscall::Syscall>, filename: &str) -
     Ok(())
 }
 
+pub fn write_syscall_numbers_to_file(syscall_numbers: Vec<i32>, filename: &str) -> std::io::Result<()> {
+    let mut file = File::create(filename)?;
+
+    let json = serde_json::to_string(&syscall_numbers).unwrap();
+    writeln!(file, "{}", json)?;
+
+    Ok(())
+}
+
 fn main() {
     // Parse command line arguments
     let matches = App::new("PTrace App")
         .arg(
+            Arg::with_name("json_files")
+                .required(false)
+                .multiple(true) // Allow multiple values
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("command")
                 .required(true)
+                .last(true)
                 .multiple(true) // Allow multiple values
                 .takes_value(true),
         )
         .get_matches();
-
+    
     // Get the command and args to run
     let command_args: Vec<&str> = matches.values_of("command").unwrap().collect();
     let (command, args) = command_args.split_at(1);
@@ -74,8 +93,45 @@ fn main() {
 
     println!("Attached to process {}", pid);
 
-    // collect syscalls
+    // collect existing syscall to build up the markov chain
     let mut syscalls: Vec<syscall::Syscall> = Vec::new();
+    let mut syscall_numbers: Vec<i32> = Vec::new();
+
+    let mut chain = markov::MarkovChain::new();
+
+    // Get the file names from the command line arguments
+    let json_files: Vec<&str> = matches.values_of("json_files").unwrap_or_default().collect();
+
+    let mut syscall_numbers_old: Vec<i32> = Vec::new();
+
+    for json_file in json_files {
+        let file = match File::open(json_file) {
+            Ok(file) => file,
+            Err(_) => {
+                eprintln!("Failed to open {}: {}", json_file, std::io::Error::last_os_error());
+                continue;
+            }
+        };
+        let reader = BufReader::new(file);
+        let syscall_numbers: Vec<i32> = match serde_json::from_reader(reader) {
+            Ok(numbers) => numbers,
+            Err(_) => {
+                eprintln!("Failed to parse JSON from {}", json_file);
+                continue;
+            }
+        };
+
+        syscall_numbers_old.extend(syscall_numbers);
+    }
+
+    // Build up the markov chain
+    let mut last_syscall: Option<i32> = None;
+    for number in &syscall_numbers_old {
+        if let Some(last) = last_syscall {
+            chain.add_sequence(last, *number);
+        }
+        last_syscall = Some(*number);
+    }
 
     // Continue to ptrace child process
     let mut is_calling = true;
@@ -100,7 +156,16 @@ fn main() {
         if is_calling {
             if syscall_number >= 0 {
                 let scall = decode_syscall(syscall_number as i32, pid);
+                if let Some(last) = last_syscall {
+                    chain.add_sequence(last, syscall_number as i32);
+                    let probability = chain.transition_probability(last, syscall_number as i32);
+                    if probability < THRESHOLD {
+                        println!("Anomaly detected: Transition from syscall {:?} to syscall {:?} has low probability: {}", Sysno::from(last), scall, probability);
+                    }
+                }
+                last_syscall = Some(syscall_number as i32);
                 syscalls.push(scall);
+                syscall_numbers.push(syscall_number as i32);
             }
         }
 
@@ -108,6 +173,7 @@ fn main() {
         if syscall_number == syscalls::Sysno::exit_group as i64 {
             let scall = decode_syscall(syscall_number as i32, pid);
             syscalls.push(scall);
+            syscall_numbers.push(syscall_number as i32);
             break;
         }
 
@@ -127,4 +193,6 @@ fn main() {
 
     // Write syscalls to file
     write_syscalls_to_file(syscalls, "syscalls.json").unwrap();
+    // Write syscall numbers to file
+    write_syscall_numbers_to_file(syscall_numbers, "syscall_numbers.json").unwrap();
 }
