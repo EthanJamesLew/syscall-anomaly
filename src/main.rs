@@ -22,7 +22,7 @@ use decoder::decode_syscall;
 
 // Define ptrace options
 const PTRACE_TRACEME: c_int = 0;
-const THRESHOLD: f64 = 0.01;
+const THRESHOLD: f64 = 0.0001;
 
 // Import the ptrace function from libc
 extern "C" {
@@ -124,13 +124,16 @@ fn main() {
         syscall_numbers_old.extend(syscall_numbers);
     }
 
-    // Build up the markov chain
-    let mut last_syscall: Option<i32> = None;
-    for number in &syscall_numbers_old {
-        if let Some(last) = last_syscall {
-            chain.add_sequence(last, *number);
+    let mut last_syscalls: Option<(i32, i32)> = None;
+    for number in syscall_numbers_old {
+        if let Some(last) = last_syscalls {
+            chain.add_sequence(last, number);
         }
-        last_syscall = Some(*number);
+        last_syscalls = if let Some((_last1, last2)) = last_syscalls {
+            Some((last2, number))
+        } else {
+            Some((100, number))  // or whatever default value makes sense
+        }
     }
 
     // Continue to ptrace child process
@@ -156,18 +159,23 @@ fn main() {
         if is_calling {
             if syscall_number >= 0 {
                 let scall = decode_syscall(syscall_number as i32, pid);
-                if let Some(last) = last_syscall {
-                    chain.add_sequence(last, syscall_number as i32);
-                    let probability = chain.transition_probability(last, syscall_number as i32);
+                if let Some((last1, last2)) = last_syscalls {
+                    let probability = chain.transition_probability((last1, last2), syscall_number as i32);
                     if probability < THRESHOLD {
-                        println!("Anomaly detected: Transition from syscall {:?} to syscall {:?} has low probability: {}", Sysno::from(last), scall, probability);
+                        println!("Anomaly detected: Transition from syscall {:?} to syscall {:?} has low probability: {}", (Sysno::from(last1), Sysno::from(last2)), scall, probability);
                     }
+                    //chain.add_sequence((last1, last2), syscall_number as i32);
                 }
-                last_syscall = Some(syscall_number as i32);
+                last_syscalls = if let Some((_last1, last2)) = last_syscalls {
+                    Some((last2, syscall_number as i32))
+                } else {
+                    Some((100, syscall_number as i32))
+                };
                 syscalls.push(scall);
                 syscall_numbers.push(syscall_number as i32);
             }
         }
+
 
         // if exit_group, exit
         if syscall_number == syscalls::Sysno::exit_group as i64 {
