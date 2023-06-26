@@ -9,10 +9,19 @@ In other words, it's a keen-eyed observer at a masquerade ball, diligently notin
 
 ## How to Run It
 
-Running our Syscall Anomaly Detector is as simple as:
+Running our Syscall Anomaly Detector with no prior syscall trace information is as simple as:
 
 ```shell
-cargo run -- <command>
+cargo run -- -- <command>
 ```
 
 Where <command> is the program you wish to monitor the system calls of.
+
+This will cause the anomaly detector to see everything as an anomaly as it has never seen any of the syscall sequences before. To pass in "nominal" set of traces,
+include a json file of syscall integers
+
+```shell
+cargo run -- syscall_numbers.json -- <command>
+```
+
+The detector will create the `syscall_numbers.json` at the end of every run.
